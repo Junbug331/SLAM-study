@@ -21,6 +21,7 @@ int main() {
   fs::path img1_path = res_dir / "1.png";
   fs::path img2_path = res_dir / "2.png";
   fs::path img1_depth_path = res_dir / "1_depth.png";
+  fs::path img2_depth_path = res_dir / "2_depth.png";
 
   cv::Mat img1 = (cv::imread(img1_path, 0));
   cv::Mat img2 = (cv::imread(img2_path, 0));
@@ -42,9 +43,9 @@ int main() {
     ushort d = d1.ptr<unsigned short>(int(kpts1[m.queryIdx].pt.y))[int(kpts1[m.queryIdx].pt.x)];
     if (d == 0) // bad depth
       continue;
-    float dd = d / 5000.f;
+    float dd1 = d / 5000.f;
     Point2d p1 = pixel2cam(kpts1[m.queryIdx].pt, K);
-    pts_3d.push_back(Point3f(p1.x * dd, p1.y * dd, dd)); // obj point
+    pts_3d.push_back(Point3f(p1.x * dd1, p1.y * dd1, dd1)); // obj point
     pts_2d.push_back(kpts2[m.trainIdx].pt); // img point
   }
   
@@ -119,7 +120,41 @@ int main() {
   cout << "pose by g2o\n";
   cout << "Rt:\n" << pose_gn.matrix() << endl << endl;
 
+  /// 3D - 3D
+  Mat depth1 = imread(img1_depth_path, IMREAD_UNCHANGED);
+  Mat depth2 = imread(img2_depth_path, IMREAD_UNCHANGED);
+  vector<cv::Point3f> pts1, pts2;
 
+  for (const auto m : matches)
+  {
+    ushort d1 = depth1.ptr<unsigned short>(int(kpts1[m.queryIdx].pt.y))[int(kpts1[m.queryIdx].pt.x)];
+    ushort d2 = depth2.ptr<unsigned short>(int(kpts2[m.trainIdx].pt.y))[int(kpts2[m.trainIdx].pt.x)];
+    if (d1 == 0 || d2 == 0)
+      continue;
+    Point2d p1 = pixel2cam(kpts1[m.queryIdx].pt, K);
+    Point2d p2 = pixel2cam(kpts2[m.trainIdx].pt, K);
+    float dd1 = float(d1) / 5000.f;
+    float dd2 = float(d2) / 5000.f;
+    pts1.push_back(Point3f(p1.x * dd1, p1.y * dd1, dd1));
+    pts2.push_back(Point3f(p2.x * dd2, p2.y * dd2, dd2));
+  }
+
+  // SVD
+  spdlog::info("ICP via SVD");
+  pose_estimation_3d3d(pts1, pts2, R, t);
+  cout << "R = \n" << R << endl;
+  cout << "t =\n" << t << endl;
+  cout << "R_inv = \n" << R.t() << endl;
+  cout << "t_inv = \n" << -R.t() * t << endl << endl;
+
+  // g2o
+  cv::Mat R_, t_;
+  spdlog::info("ICP via G2O");
+  bundleAdjustment(pts1, pts2, R_, t_);
+  cout << "R = \n" << R_ << endl;
+  cout << "t =\n" << t_ << endl;
+  cout << "R_inv = \n" << R_.t() << endl;
+  cout << "t_inv = \n" << -(R_.t() * t_) << endl << endl;
 
   return 0;
 }

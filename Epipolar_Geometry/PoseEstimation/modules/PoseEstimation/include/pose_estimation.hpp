@@ -6,6 +6,7 @@
 #include <g2o/core/base_vertex.h>
 #include <g2o/core/block_solver.h>
 #include <g2o/core/optimization_algorithm_gauss_newton.h>
+#include <g2o/core/optimization_algorithm_levenberg.h>
 #include <g2o/core/solver.h>
 #include <g2o/core/sparse_optimizer.h>
 #include <g2o/solvers/dense/linear_solver_dense.h>
@@ -45,8 +46,8 @@ public:
     _estimate = Sophus::SE3d::exp(update_eigen) * _estimate;
   }
 
-  virtual bool read(std::istream &in) override { return true;}
-  virtual bool write(std::ostream &out) const override {return true;}
+  virtual bool read(std::istream &in) override { return true; }
+  virtual bool write(std::ostream &out) const override { return true; }
 };
 
 class EdgeProjection
@@ -82,13 +83,76 @@ public:
         fy + fy * Y * Y / Z2, -fy * X * Y / Z2, -fy * X / Z;
   }
 
-  virtual bool read(std::istream &in) override { return true;}
-  virtual bool write(std::ostream &out) const override {return true;}
+  virtual bool read(std::istream &in) override { return true; }
+  virtual bool write(std::ostream &out) const override { return true; }
 
 private:
   Eigen::Vector3d _pos3d;
   Eigen::Matrix3d _K;
 };
 
+/*
+class EdgeProjectXYZRGBDPoseOnly
+    : public g2o::BaseUnaryEdge<3, Eigen::Vector3d, VertexPose> {
+public:
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+  EdgeProjectXYZRGBDPoseOnly(const Eigen::Vector3d &point) : _point(point) {}
+
+  virtual void computeError() override {
+    const VertexPose *pose = static_cast<const VertexPose *>(_vertices[0]);
+    _error = _measurement - pose->estimate() * _point;
+  }
+
+  virtual void linearizeOplus() override {
+    VertexPose *pose = static_cast<VertexPose *> (_vertices[0]);
+    Sophus::SE3d T = pose->estimate();
+    Eigen::Vector3d xyz_trans = T * _point;
+    _jacobianOplusXi.block<3, 3>(0, 0) = -Eigen::Matrix3d::Identity();
+    _jacobianOplusXi.block<3, 3>(0, 3) = Sophus::SO3d::hat(xyz_trans);
+  }
+
+  virtual bool read(std::istream &in) override { return true; }
+  virtual bool write(std::ostream &out) const override { return true; }
+
+protected:
+  Eigen::Vector3d _point;
+};
+
+*/
+class EdgeProjectXYZRGBDPoseOnly
+    : public g2o::BaseUnaryEdge<3, Eigen::Vector3d, VertexPose> {
+public:
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+
+  EdgeProjectXYZRGBDPoseOnly(const Eigen::Vector3d &point) : _point(point) {}
+
+  virtual void computeError() override {
+    const VertexPose *pose = static_cast<const VertexPose *>(_vertices[0]);
+    _error = _measurement - pose->estimate() * _point;
+  }
+
+  virtual void linearizeOplus() override {
+    VertexPose *pose = static_cast<VertexPose *>(_vertices[0]);
+    Sophus::SE3d T = pose->estimate();
+    Eigen::Vector3d xyz_trans = T * _point;
+    _jacobianOplusXi.block<3, 3>(0, 0) = -Eigen::Matrix3d::Identity();
+    _jacobianOplusXi.block<3, 3>(0, 3) = Sophus::SO3d::hat(xyz_trans);
+  }
+
+  bool read(std::istream &in) {return true;}
+
+  bool write(std::ostream &out) const {return true;}
+
+protected:
+  Eigen::Vector3d _point;
+};
+
+void pose_estimation_3d3d(const std::vector<cv::Point3f> &pts1,
+                          const std::vector<cv::Point3f> &pts2, cv::Mat &R,
+                          cv::Mat &t);
+
+void bundleAdjustment(const std::vector<cv::Point3f> &pts1,
+                      const std::vector<cv::Point3f> &pts2, cv::Mat &R,
+                      cv::Mat &t);
 } // namespace PoseEstimation
 #endif
