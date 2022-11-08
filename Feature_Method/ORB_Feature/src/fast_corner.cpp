@@ -383,9 +383,37 @@ void ComputeORB(const cv::Mat &img, std::vector<cv::KeyPoint> &keypoints,
 
     // compute the angle of this point (8 x 32 bits)
     DescType desc(8, 0);
+
+    // cv::Mutex mu;
+    // cv::parallel_for_(cv::Range(0, 256), [&](const cv::Range range) {
+    //   for (int idx = range.start; idx < range.end; ++idx) {
+    //     int i = idx / 32;
+    //     int k = idx - (i * 32);
+
+    //     // Pick a pair of random point (from pre-defined ORB pattern)
+    //     int idx_pattern = idx * 4;
+    //     cv::Point2f p(ORB_pattern[idx_pattern], ORB_pattern[idx_pattern + 1]);
+    //     cv::Point2f q(ORB_pattern[idx_pattern + 2], ORB_pattern[idx_pattern + 3]);
+
+    //     // rotate with theta
+    //     cv::Point2f p_rot = cv::Point2f(cos_theta * p.x - sin_theta * p.y,
+    //                                     sin_theta * p.x + cos_theta * p.y) +
+    //                         kp.pt;
+    //     cv::Point2f q_rot = cv::Point2f(cos_theta * q.x - sin_theta * q.y,
+    //                                     sin_theta * q.x + cos_theta * q.y) +
+    //                         kp.pt;
+
+    //     if (img.at<uchar>(p_rot.y, p_rot.x) < img.at<uchar>(q_rot.y, q_rot.x))
+    //     {
+    //       mu.lock();
+    //       desc[i] |= 1 << k;
+    //       mu.unlock();
+    //     }
+    //   }
+    // });
+
     for (int i = 0; i < 8; ++i) {
       // 32 bit
-      uint32_t d = 0;
       for (int k = 0; k < 32; ++k) {
         // global idx [0, 256)
         int idx_pq = i * 32 + k;
@@ -400,17 +428,17 @@ void ComputeORB(const cv::Mat &img, std::vector<cv::KeyPoint> &keypoints,
                                      sin_theta * q.x + cos_theta * q.y) +
                          kp.pt;
         if (img.at<uchar>(pp.y, pp.x) < img.at<uchar>(qq.y, qq.x)) {
-          d |= 1 << k;
+          desc[i] |= 1 << k;
         }
       }
-      desc[i] = d;
     }
+
     descriptors.push_back(desc);
   }
   spdlog::info("bad/total: {}/{}", bad_points, keypoints.size());
 }
 
-//brute-force matching
+// brute-force matching
 void BfMatch(const std::vector<DescType> &desc1,
              const std::vector<DescType> &desc2,
              std::vector<cv::DMatch> &matches) {
@@ -435,4 +463,3 @@ void BfMatch(const std::vector<DescType> &desc1,
       matches.push_back(m);
   }
 }
-
